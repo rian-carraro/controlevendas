@@ -292,13 +292,10 @@ async function abrirModalPrec(prec = null) {
   if (prec) {
     document.getElementById('mp-id').value = prec.id;
     document.getElementById('mp-nome').value = prec.produto_nome || '';
-    document.getElementById('mp-rendimento').value = prec.rendimento || 1;
+    document.getElementById('mp-rendimento').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? (prec.rendimento || 1) : (p.rendimento || 1); } catch { return prec.rendimento || 1; } })();
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
-    const parsed = prec.insumos_json ? JSON.parse(prec.insumos_json) : {};
-const linhas = parsed.linhas || parsed; // compatível com registros antigos
-const rendimentoSalvo = parsed.rendimento || 1;
-document.getElementById('mp-rendimento').value = rendimentoSalvo;
+    const linhas = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : []; return Array.isArray(p) ? p : (p.linhas || []); } catch { return []; } })();
     linhas.forEach(l => addInsumoLinha(l));
   } else {
     addInsumoLinha();
@@ -396,16 +393,8 @@ async function savePrec() {
   const custoUnit    = subtotal1 / rendimento;
   const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
- const dadosExtras = { rendimento };
-const payload = { 
-  produto_nome: nome, 
-  custo_ingredientes: totalInsumos, 
-  mao_de_obra: 0, 
-  preco_final, 
-  observacoes: obs, 
-  insumos_json: JSON.stringify({ linhas, ...dadosExtras }) 
-};
-try {
+  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento }) };
+  try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);
     closeModal('modal-prec');
@@ -420,7 +409,7 @@ async function loadPrecificacoes() {
     const data = await sbGet('precificacoes', 'select=*&order=criado_em.desc');
     if (!data.length) { document.getElementById('lista-precificacoes').innerHTML = '<div class="empty"><p>Nenhuma precificação salva. Clique em "+ Nova Precificação".</p></div>'; return; }
     document.getElementById('lista-precificacoes').innerHTML = data.map(p => {
-      const linhas = p.insumos_json ? JSON.parse(p.insumos_json) : [];
+      const _parsed = p.insumos_json ? JSON.parse(p.insumos_json) : []; const linhas = Array.isArray(_parsed) ? _parsed : (_parsed.linhas || []); const _rend = Array.isArray(_parsed) ? (p.rendimento || 1) : (_parsed.rendimento || 1);
       const tags = linhas.map(l => `<span class="prec-card-tag">${l.nome} — ${l.quantidade}${UNID_MAP[_insumos.find(i=>i.id===l.insumo_id)?.unidade]?.base || ''}</span>`).join('');
       return `<div class="prec-card">
         <div class="prec-card-header">
@@ -429,7 +418,7 @@ async function loadPrecificacoes() {
         </div>
         ${tags ? `<div class="prec-card-insumos">${tags}</div>` : ''}
         <div style="font-size:.82rem;color:var(--text3);margin-bottom:10px">
-          Insumos: ${fmt(p.custo_ingredientes)} | Rende: ${p.rendimento || 1} un | Preço/un: ${fmt(p.preco_final)}
+          Insumos: ${fmt(p.custo_ingredientes)} | Rende: ${_rend} un | Preço/un: ${fmt(p.preco_final)}
           ${p.observacoes ? ' | ' + p.observacoes : ''}
         </div>
         <div class="prec-card-actions">

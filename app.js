@@ -139,7 +139,12 @@ const UNID_MAP = {
 // Calcula custo por unidade base dado: custo embalagem, tamanho embalagem, unidade
 function calcCustoBase(custo, embalagem, unidade) {
   const map = UNID_MAP[unidade] || { base: unidade, fator: 1 };
-  const qtd = unidade === 'kg' || unidade === 'L' ? (embalagem || map.fator) : map.fator;
+  // pct: divide pelo número de unidades no pacote
+  if (unidade === 'pct') {
+    const qtd = embalagem || 1;
+    return qtd > 0 ? custo / qtd : 0;
+  }
+  const qtd = (unidade === 'kg' || unidade === 'L' || unidade === 'g' || unidade === 'ml') ? (embalagem || map.fator) : map.fator;
   return qtd > 0 ? custo / qtd : 0;
 }
 
@@ -165,6 +170,10 @@ function updateCustoLabel() {
     wrap.style.display = 'block'; lbl.textContent = 'Custo da embalagem (R$)';
     embUnit.textContent = 'ml'; embLbl.textContent = 'Volume da embalagem (ml)';
     document.getElementById('mi-embalagem').placeholder = '500';
+  } else if (un === 'pct') {
+    wrap.style.display = 'block'; lbl.textContent = 'Custo do pacote (R$)';
+    embUnit.textContent = 'un'; embLbl.textContent = 'Unidades por pacote';
+    document.getElementById('mi-embalagem').placeholder = '10';
   } else {
     wrap.style.display = 'none'; lbl.textContent = 'Custo por unidade (R$)';
   }
@@ -178,16 +187,16 @@ function updateCustoUnitInfo() {
   const info  = document.getElementById('custo-unit-info');
   if (!custo) { info.style.display = 'none'; return; }
   const map = UNID_MAP[un] || { base: un, fator: 1 };
-  let custoBase, label;
-  if (un === 'kg' || un === 'L' || un === 'g' || un === 'ml') {
+  let custoBase;
+  if (un === 'kg' || un === 'L' || un === 'g' || un === 'ml' || un === 'pct') {
     const qtd = emb || map.fator;
     custoBase = qtd > 0 ? custo / qtd : 0;
-    label = `Custo por ${map.base}: ${fmt(custoBase)}`;
+    const baseLabel = un === 'pct' ? 'un' : map.base;
+    document.getElementById('custo-unit-valor').textContent = fmt(custoBase) + ' / ' + baseLabel;
   } else {
     custoBase = custo;
-    label = `Custo por ${map.base}: ${fmt(custoBase)}`;
+    document.getElementById('custo-unit-valor').textContent = fmt(custoBase) + ' / ' + map.base;
   }
-  document.getElementById('custo-unit-valor').textContent = fmt(custoBase) + ' / ' + map.base;
   info.style.display = 'block';
 }
 

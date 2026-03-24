@@ -28,18 +28,7 @@ async function sbDelete(table, id) {
   if (!r.ok) throw new Error(await r.text());
 }
 
-// ── STORAGE: upload foto ──
-async function uploadFoto(file) {
-  const ext = file.name.split('.').pop();
-  const path = `${Date.now()}.${ext}`;
-  const r = await fetch(`${SB_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`, {
-    method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': file.type },
-    body: file
-  });
-  if (!r.ok) throw new Error('Erro ao enviar foto');
-  return `${SB_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
-}
+// ── STORAGE: removido (sem foto) ──
 
 // ── UTILS ──
 const fmt = v => 'R$\u00a0' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -154,20 +143,6 @@ function calcCustoBase(custo, embalagem, unidade) {
   return qtd > 0 ? custo / qtd : 0;
 }
 
-let _fotoFile = null; // arquivo selecionado para upload
-
-function previewFoto(input) {
-  const file = input.files[0]; if (!file) return;
-  _fotoFile = file;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('foto-preview').src = e.target.result;
-    document.getElementById('foto-preview').style.display = 'block';
-    document.getElementById('foto-placeholder').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
-}
-
 function updateCustoLabel() {
   const un = document.getElementById('mi-unidade').value;
   const wrap = document.getElementById('mi-embalagem-wrap');
@@ -217,16 +192,12 @@ function updateCustoUnitInfo() {
 }
 
 function abrirModalInsumo(insumo = null) {
-  _fotoFile = null;
   document.getElementById('mi-id').value = '';
   document.getElementById('mi-nome').value = '';
   document.getElementById('mi-unidade').value = 'un';
   document.getElementById('mi-custo').value = '';
   document.getElementById('mi-fornecedor').value = '';
   document.getElementById('mi-obs').value = '';
-  document.getElementById('foto-preview').src = '';
-  document.getElementById('foto-preview').style.display = 'none';
-  document.getElementById('foto-placeholder').style.display = 'flex';
   if (document.getElementById('mi-embalagem')) document.getElementById('mi-embalagem').value = '';
   document.getElementById('custo-unit-info').style.display = 'none';
   document.getElementById('mi-embalagem-wrap').style.display = 'none';
@@ -241,11 +212,6 @@ function abrirModalInsumo(insumo = null) {
     document.getElementById('mi-fornecedor').value = insumo.fornecedor || '';
     document.getElementById('mi-obs').value = insumo.observacoes || '';
     if (insumo.embalagem_qtd) document.getElementById('mi-embalagem').value = insumo.embalagem_qtd;
-    if (insumo.foto_url) {
-      document.getElementById('foto-preview').src = insumo.foto_url;
-      document.getElementById('foto-preview').style.display = 'block';
-      document.getElementById('foto-placeholder').style.display = 'none';
-    }
     updateCustoLabel();
     updateCustoUnitInfo();
   }
@@ -263,12 +229,8 @@ async function saveInsumo() {
   if (!nome) { showToast('Informe o nome do insumo', 'error'); return; }
 
   const custoBase = calcCustoBase(custoEmb, embQtd, unidade);
-  let foto_url = document.getElementById('foto-preview').src || null;
-  if (foto_url && foto_url.startsWith('data:')) foto_url = null; // não salvar data URL
-  
   try {
-    if (_fotoFile) foto_url = await uploadFoto(_fotoFile);
-    const payload = { nome, unidade, custo_unitario: custoBase, custo_embalagem: custoEmb, embalagem_qtd: embQtd || null, fornecedor, observacoes: obs, foto_url };
+    const payload = { nome, unidade, custo_unitario: custoBase, custo_embalagem: custoEmb, embalagem_qtd: embQtd || null, fornecedor, observacoes: obs };
     if (id) await sbPatch('insumos', id, payload);
     else    await sbPost('insumos', payload);
     closeModal('modal-insumo');
@@ -285,7 +247,6 @@ async function loadInsumos() {
     document.getElementById('grid-insumos').innerHTML = data.map(r => {
       const map = UNID_MAP[r.unidade] || { base: r.unidade };
       return `<div class="insumo-card">
-        ${r.foto_url ? `<img class="insumo-card-foto" src="${r.foto_url}" alt="${r.nome}" loading="lazy">` : `<div class="insumo-card-foto-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`}
         <div class="insumo-card-body">
           <div class="insumo-card-nome">${r.nome}</div>
           <div class="insumo-card-custo">${fmt(r.custo_unitario)} / ${map.base}</div>
@@ -311,6 +272,7 @@ async function abrirModalPrec(prec = null) {
   _linhaCont = 0;
   document.getElementById('mp-id').value = '';
   document.getElementById('mp-nome').value = '';
+  document.getElementById('mp-rendimento').value = '1';
   document.getElementById('mp-obs').value = '';
   document.getElementById('mp-insumos-lista').innerHTML = '';
   document.getElementById('modal-prec-title').textContent = prec ? 'Editar Precificação' : 'Nova Precificação';
@@ -321,6 +283,7 @@ async function abrirModalPrec(prec = null) {
   if (prec) {
     document.getElementById('mp-id').value = prec.id;
     document.getElementById('mp-nome').value = prec.produto_nome || '';
+    document.getElementById('mp-rendimento').value = prec.rendimento || 1;
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
     const linhas = prec.insumos_json ? JSON.parse(prec.insumos_json) : [];
@@ -375,7 +338,7 @@ function recalcPrec() {
     const qtdEl   = document.getElementById('linha-qtd-'  + idN);
     const custoEl = document.getElementById('linha-custo-'+ idN);
     if (!sel || !qtdEl) return;
-    const opt      = sel.options[sel.selectedIndex];
+    const opt       = sel.options[sel.selectedIndex];
     const custoUnit = parseFloat(opt?.getAttribute('data-custo')) || 0;
     const qtd       = parseFloat(qtdEl.value) || 0;
     const subtotal  = custoUnit * qtd;
@@ -383,16 +346,19 @@ function recalcPrec() {
     totalInsumos += subtotal;
   });
 
-  // Fórmula: subtotal1 = insumos + 20%, depois preço = subtotal1 + 20%
-  const lucroInsumos  = totalInsumos * 0.20;
-  const subtotal1     = totalInsumos + lucroInsumos;   // insumos + 20%
-  const margemFinal   = subtotal1 * 0.20;              // mais 20% em cima
-  const sugerido      = subtotal1 + margemFinal;       // = subtotal1 × 1.20
+  const lucroInsumos = totalInsumos * 0.20;          // +20% sobre insumos
+  const subtotal1    = totalInsumos + lucroInsumos;  // subtotal
+
+  const rendimento   = Math.max(1, parseInt(document.getElementById('mp-rendimento')?.value) || 1);
+  const custoUnit    = subtotal1 / rendimento;        // custo por unidade
+  const maoObra      = custoUnit * 0.20;             // +20% de mão de obra por unidade
+  const sugerido     = custoUnit + maoObra;           // preço sugerido por unidade
 
   document.getElementById('mp-custo-insumos').textContent  = fmt(totalInsumos);
   document.getElementById('mp-lucro-insumos').textContent  = fmt(lucroInsumos);
   document.getElementById('mp-subtotal').textContent       = fmt(subtotal1);
-  document.getElementById('mp-margem-final').textContent   = fmt(margemFinal);
+  document.getElementById('mp-custo-unit').textContent     = fmt(custoUnit);
+  document.getElementById('mp-margem-final').textContent   = fmt(maoObra);
   document.getElementById('mp-preco-sugerido').textContent = fmt(sugerido);
 }
 
@@ -413,10 +379,12 @@ async function savePrec() {
   });
 
   const totalInsumos = linhas.reduce((a, l) => a + l.custo_unit * l.quantidade, 0);
-  const subtotal1    = totalInsumos * 1.20;   // insumos + 20%
-  const preco_final  = subtotal1 * 1.20;       // subtotal + mais 20%
+  const rendimento   = Math.max(1, parseInt(document.getElementById('mp-rendimento').value) || 1);
+  const subtotal1    = totalInsumos * 1.20;
+  const custoUnit    = subtotal1 / rendimento;
+  const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
-  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, observacoes: obs, insumos_json: JSON.stringify(linhas) };
+  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, rendimento, observacoes: obs, insumos_json: JSON.stringify(linhas) };
   try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);
@@ -441,7 +409,7 @@ async function loadPrecificacoes() {
         </div>
         ${tags ? `<div class="prec-card-insumos">${tags}</div>` : ''}
         <div style="font-size:.82rem;color:var(--text3);margin-bottom:10px">
-          Insumos: ${fmt(p.custo_ingredientes)} | Mão de obra: ${fmt(p.mao_de_obra)}
+          Insumos: ${fmt(p.custo_ingredientes)} | Rende: ${p.rendimento || 1} un | Preço/un: ${fmt(p.preco_final)}
           ${p.observacoes ? ' | ' + p.observacoes : ''}
         </div>
         <div class="prec-card-actions">

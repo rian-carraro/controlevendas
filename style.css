@@ -148,13 +148,6 @@ tr.pendente td { border-left: 3px solid var(--red); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .inline-input { width: 100px !important; padding: 6px 10px !important; font-size: .85rem !important; }
 
-/* ══ FOTO UPLOAD ══ */
-.foto-upload { border: 2px dashed var(--warm2); border-radius: var(--r-sm); min-height: 100px; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; transition: border-color .2s; background: var(--bg); }
-.foto-upload:hover { border-color: var(--brand); }
-.foto-upload img { width: 100%; max-height: 180px; object-fit: cover; display: block; }
-.foto-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text3); padding: 20px; }
-.foto-placeholder span { font-size: .82rem; }
-
 /* ══ CUSTO UNIT INFO ══ */
 .custo-unit-info { background: var(--brand-l); border-radius: var(--r-sm); padding: 10px 14px; font-size: .83rem; color: var(--brand-d); margin-bottom: 14px; }
 
@@ -162,8 +155,6 @@ tr.pendente td { border-left: 3px solid var(--red); }
 .insumos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .insumo-card { background: var(--white); border-radius: var(--r); border: 1.5px solid var(--warm2); box-shadow: var(--shadow); overflow: hidden; transition: transform .2s, box-shadow .2s; }
 .insumo-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-.insumo-card-foto { width: 100%; height: 120px; object-fit: cover; background: var(--warm); display: block; }
-.insumo-card-foto-placeholder { width: 100%; height: 120px; background: var(--warm); display: flex; align-items: center; justify-content: center; color: var(--text3); }
 .insumo-card-body { padding: 14px; }
 .insumo-card-nome { font-weight: 600; font-size: .95rem; color: var(--text); margin-bottom: 4px; }
 .insumo-card-custo { font-family: 'Poppins', sans-serif; font-size: .85rem; color: var(--brand-d); font-weight: 600; margin-bottom: 2px; }
@@ -182,6 +173,18 @@ tr.pendente td { border-left: 3px solid var(--red); }
 .prec-resumo-box { background: var(--bg); border-radius: var(--r-sm); border: 1.5px solid var(--warm2); padding: 16px; margin-bottom: 16px; }
 .prec-resumo-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--warm2); font-size: .88rem; gap: 8px; flex-wrap: wrap; }
 .prec-resumo-row:last-child { border-bottom: none; }
+
+/* Linha de rendimento */
+.prec-resumo-row-destaque { background: var(--brand-l); border-radius: var(--r-sm); padding: 12px 14px !important; border: 1.5px solid var(--brand) !important; margin: 4px 0; flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+.prec-rendimento-wrap { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.prec-rendimento-wrap span { font-weight: 600; color: var(--brand-d); font-size: .88rem; }
+.prec-rendimento-input-wrap { display: flex; align-items: center; gap: 6px; }
+.prec-rendimento-input-wrap input { width: 72px; padding: 7px 10px; border: 1.5px solid var(--brand); border-radius: var(--r-sm); font-family: 'Poppins', sans-serif; font-size: .95rem; font-weight: 600; color: var(--text); background: var(--white); outline: none; text-align: center; -moz-appearance: textfield; }
+.prec-rendimento-input-wrap input:focus { border-color: var(--brand-d); }
+.prec-rendimento-unit { font-size: .82rem; color: var(--brand-d); font-weight: 600; }
+.prec-custo-unit-wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 4px; border-top: 1px dashed var(--brand); }
+.prec-custo-unit-label { font-size: .78rem; font-weight: 600; color: var(--brand-d); text-transform: uppercase; letter-spacing: .04em; }
+.prec-custo-unit-val { font-size: 1.1rem; font-weight: 700; color: var(--brand-d); }
 .prec-resumo-total { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 0; font-weight: 700; font-size: .95rem; }
 .prec-resumo-total .val { font-family: 'Poppins', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--brand-d); }
 

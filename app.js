@@ -295,7 +295,10 @@ async function abrirModalPrec(prec = null) {
     document.getElementById('mp-rendimento').value = prec.rendimento || 1;
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
-    const linhas = prec.insumos_json ? JSON.parse(prec.insumos_json) : [];
+    const parsed = prec.insumos_json ? JSON.parse(prec.insumos_json) : {};
+const linhas = parsed.linhas || parsed; // compatível com registros antigos
+const rendimentoSalvo = parsed.rendimento || 1;
+document.getElementById('mp-rendimento').value = rendimentoSalvo;
     linhas.forEach(l => addInsumoLinha(l));
   } else {
     addInsumoLinha();
@@ -393,8 +396,16 @@ async function savePrec() {
   const custoUnit    = subtotal1 / rendimento;
   const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
-  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, rendimento, observacoes: obs, insumos_json: JSON.stringify(linhas) };
-  try {
+ const dadosExtras = { rendimento };
+const payload = { 
+  produto_nome: nome, 
+  custo_ingredientes: totalInsumos, 
+  mao_de_obra: 0, 
+  preco_final, 
+  observacoes: obs, 
+  insumos_json: JSON.stringify({ linhas, ...dadosExtras }) 
+};
+try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);
     closeModal('modal-prec');

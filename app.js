@@ -94,7 +94,11 @@ function renderChartPizza(tv, tc) {
 async function loadDashboard() {
   document.getElementById('dash-data').textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
   try {
-    const [vendas, compras] = await Promise.all([sbGet('vendas', 'select=valor,data'), sbGet('compras', 'select=valor,data')]);
+    const [vendas, compras, todasMovs] = await Promise.all([
+      sbGet('vendas', 'select=valor,data,status_pagamento'),
+      sbGet('compras', 'select=valor,data'),
+      sbGet('movimentacoes', 'select=valor,tipo,categoria')
+    ]);
     const m = thisMonth();
     const vMes = vendas.filter(x => x.data && x.data.startsWith(m));
     const cMes = compras.filter(x => x.data && x.data.startsWith(m));
@@ -102,10 +106,11 @@ async function loadDashboard() {
     const totalC = cMes.reduce((a, x) => a + Number(x.valor), 0);
     const totV = vendas.reduce((a, x) => a + Number(x.valor), 0);
     const totC = compras.reduce((a, x) => a + Number(x.valor), 0);
-    const [movE, movS] = await Promise.all([sbGet('movimentacoes', 'select=valor&tipo=eq.entrada&categoria=eq.manual'), sbGet('movimentacoes', 'select=valor&tipo=eq.saida&categoria=eq.manual')]);
-    const me = movE.reduce((a, x) => a + Number(x.valor), 0);
-    const ms = movS.reduce((a, x) => a + Number(x.valor), 0);
-    const saldo = totV - totC + me - ms; const lucro = totalV - totalC;
+    // Saldo = todas entradas (vendas + manuais) - todas saídas (compras + manuais)
+    const totalEntradas = todasMovs.filter(x => x.tipo === 'entrada').reduce((a, x) => a + Number(x.valor), 0);
+    const totalSaidas   = todasMovs.filter(x => x.tipo === 'saida').reduce((a, x) => a + Number(x.valor), 0);
+    const saldo = totalEntradas - totalSaidas;
+    const lucro = totalV - totalC;
     document.getElementById('c-saldo').textContent = fmt(saldo); document.getElementById('c-saldo').className = 'card-value ' + (saldo >= 0 ? 'green' : 'red');
     document.getElementById('c-vendas').textContent = fmt(totalV); document.getElementById('c-compras').textContent = fmt(totalC);
     document.getElementById('c-vendas-n').textContent = vMes.length + ' transações'; document.getElementById('c-compras-n').textContent = cMes.length + ' transações';
@@ -116,7 +121,7 @@ async function loadDashboard() {
     const movs = await sbGet('movimentacoes', 'select=*&order=criado_em.desc&limit=8');
     const el = document.getElementById('dash-ultimas');
     if (!movs.length) { el.innerHTML = '<div class="empty"><p>Nenhuma movimentação ainda</p></div>'; return; }
-    el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>${movs.map(r => `<tr><td>${fmtDate(r.data)}</td><td><strong>${r.descricao || '—'}</strong></td><td><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></td><td><span class="num" style="font-weight:600;color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></td></tr>`).join('')}</tbody></table></div><div class="cards-mobile">${movs.map(r => `<div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao || '—'}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></div></div>`).join('')}</div>`;
+    el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>${movs.map(r => `<tr><td>${fmtDate(r.data)}</td><td><strong>${r.descricao || '—'}</strong></td><td><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></td><td><span class="num" style="font-weight:600;color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></td></tr><div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao || '—'}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></div></div>`).join('')}</tbody></table></div>`;
   } catch (e) { showToast('Erro no dashboard: ' + e.message, 'error'); }
 }
 
@@ -519,8 +524,7 @@ async function loadVendas() {
     const total = data.reduce((a, x) => a + Number(x.valor), 0);
     document.getElementById('total-vendas-label').textContent = `Total: ${fmt(total)} (${data.length} venda${data.length !== 1 ? 's' : ''})`;
     if (!data.length) { document.getElementById('lista-vendas').innerHTML = '<div class="empty"><p>Nenhuma venda no período</p></div>'; return; }
-    // rows split into tableRows and cardRows below
-    const tableRows = data.map(r => {
+    const rows = data.map(r => {
       const pend = r.status_pagamento === 'pendente';
       return `<tr class="${pend ? 'pendente' : ''}">
         <td>${fmtDate(r.data)}</td>
@@ -534,11 +538,8 @@ async function loadVendas() {
           <button class="btn btn-edit btn-sm" onclick='abrirModalVenda(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
           <button class="btn btn-danger btn-sm" onclick="del('vendas','${r.id}',loadVendas)">Excluir</button>
         </td>
-      </tr>`;
-    }).join('');
-    const cardRows = data.map(r => {
-      const pend = r.status_pagamento === 'pendente';
-      return `<div class="row-card ${pend ? 'pendente' : ''}">
+      </tr>
+      <div class="row-card ${pend ? 'pendente' : ''}">
         <div class="row-card-top">
           <span class="row-card-title">${r.descricao}</span>
           <span class="row-card-value" style="color:var(--green)">${fmt(r.valor)}</span>
@@ -554,7 +555,7 @@ async function loadVendas() {
     }).join('');
     document.getElementById('lista-vendas').innerHTML = `<div class="table-scroll"><table>
       <thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Unit.</th><th>Total</th><th>Pagamento</th><th>Obs.</th><th></th></tr></thead>
-      <tbody>${tableRows}</tbody></table></div><div class="cards-mobile">${cardRows}</div>`;
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -603,7 +604,7 @@ async function loadCompras() {
     const total = data.reduce((a, x) => a + Number(x.valor), 0);
     document.getElementById('total-compras-label').textContent = `Total: ${fmt(total)} (${data.length} compra${data.length !== 1 ? 's' : ''})`;
     if (!data.length) { document.getElementById('lista-compras').innerHTML = '<div class="empty"><p>Nenhuma compra no período</p></div>'; return; }
-    const tableRows = data.map(r => `
+    const rows = data.map(r => `
       <tr>
         <td>${fmtDate(r.data)}</td><td><strong>${r.descricao}</strong></td>
         <td><span class="num" style="font-weight:700;color:var(--red)">${fmt(r.valor)}</span></td>
@@ -612,8 +613,7 @@ async function loadCompras() {
           <button class="btn btn-edit btn-sm" onclick='abrirModalCompra(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
           <button class="btn btn-danger btn-sm" onclick="del('compras','${r.id}',loadCompras)">Excluir</button>
         </td>
-      </tr>`).join('');
-    const cardRows = data.map(r => `
+      </tr>
       <div class="row-card">
         <div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--red)">${fmt(r.valor)}</span></div>
         <div class="row-card-meta">
@@ -625,7 +625,7 @@ async function loadCompras() {
       </div>`).join('');
     document.getElementById('lista-compras').innerHTML = `<div class="table-scroll"><table>
       <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th><th></th></tr></thead>
-      <tbody>${tableRows}</tbody></table></div><div class="cards-mobile">${cardRows}</div>`;
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -681,7 +681,7 @@ async function loadMovimentacoes() {
     document.getElementById('fin-saldo').className   = 'card-value ' + (saldo >= 0 ? 'green' : 'red');
     const data = await sbGet('movimentacoes', params);
     if (!data.length) { document.getElementById('lista-movimentacoes').innerHTML = '<div class="empty"><p>Nenhuma movimentação no período</p></div>'; return; }
-    const tableRows = data.map(r => `
+    const rows = data.map(r => `
       <tr>
         <td>${fmtDate(r.data)}</td><td><strong>${r.descricao}</strong></td>
         <td><span class="badge ${r.categoria}">${r.categoria}</span></td>
@@ -691,8 +691,7 @@ async function loadMovimentacoes() {
           <button class="btn btn-edit btn-sm" onclick='abrirModalMov(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
           <button class="btn btn-danger btn-sm" onclick="del('movimentacoes','${r.id}',loadMovimentacoes)">Excluir</button>
         </td>
-      </tr>`).join('');
-    const cardRows = data.map(r => `
+      </tr>
       <div class="row-card">
         <div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div>
         <div class="row-card-meta">
@@ -704,7 +703,7 @@ async function loadMovimentacoes() {
       </div>`).join('');
     document.getElementById('lista-movimentacoes').innerHTML = `<div class="table-scroll"><table>
       <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
-      <tbody>${tableRows}</tbody></table></div><div class="cards-mobile">${cardRows}</div>`;
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -725,8 +724,8 @@ async function gerarRelatorio() {
     document.getElementById('rel-l').className = 'card-value ' + (lucro >= 0 ? 'green' : 'red');
     document.getElementById('rel-vn').textContent = vendas.length + ' vendas'; document.getElementById('rel-cn').textContent = compras.length + ' compras';
     let html = '';
-    if (vendas.length) html += `<div class="table-wrap" style="margin-bottom:16px"><div class="table-header"><h3>Vendas no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>${vendas.map(r => `<tr class="${r.status_pagamento==='pendente'?'pendente':''}"><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num">${r.quantidade||1}</span></td><td><span class="num" style="color:var(--green);font-weight:600">${fmt(r.valor)}</span></td><td><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></td></tr>`).join('')}</tbody></table></div><div class="cards-mobile">${vendas.map(r => `<div class="row-card ${r.status_pagamento==='pendente'?'pendente':''}"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--green)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></div></div>`).join('')}</div></div>`;
-    if (compras.length) html += `<div class="table-wrap"><div class="table-header"><h3>Compras no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>${compras.map(r => `<tr><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num" style="color:var(--red);font-weight:600">${fmt(r.valor)}</span></td><td style="color:var(--text3)">${r.observacoes||'—'}</td></tr>`).join('')}</tbody></table></div><div class="cards-mobile">${compras.map(r => `<div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--red)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span></div></div>`).join('')}</div></div>`;
+    if (vendas.length) html += `<div class="table-wrap" style="margin-bottom:16px"><div class="table-header"><h3>Vendas no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>${vendas.map(r => `<tr class="${r.status_pagamento==='pendente'?'pendente':''}"><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num">${r.quantidade||1}</span></td><td><span class="num" style="color:var(--green);font-weight:600">${fmt(r.valor)}</span></td><td><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></td></tr><div class="row-card ${r.status_pagamento==='pendente'?'pendente':''}"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--green)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></div></div>`).join('')}</tbody></table></div></div>`;
+    if (compras.length) html += `<div class="table-wrap"><div class="table-header"><h3>Compras no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>${compras.map(r => `<tr><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num" style="color:var(--red);font-weight:600">${fmt(r.valor)}</span></td><td style="color:var(--text3)">${r.observacoes||'—'}</td></tr><div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--red)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span></div></div>`).join('')}</tbody></table></div></div>`;
     if (!html) html = '<div class="empty"><p>Nenhum dado neste período</p></div>';
     document.getElementById('rel-detalhe').innerHTML = html; showToast('Relatório gerado!', 'success');
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }

@@ -258,7 +258,12 @@ tr.pendente td { border-left: 3px solid var(--red); }
 .hamburger { background: transparent; border: none; cursor: pointer; display: flex; flex-direction: column; gap: 5px; padding: 4px; -webkit-tap-highlight-color: transparent; }
 .hamburger span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; }
 
-
+/* ══ BOTTOM NAV ══ */
+.bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: var(--nav-h); background: var(--text); z-index: 200; box-shadow: 0 -2px 14px rgba(0,0,0,.12); padding-bottom: env(safe-area-inset-bottom); }
+.bottom-nav-inner { display: flex; align-items: stretch; height: 100%; }
+.bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: transparent; color: rgba(255,255,255,.4); font-family: 'Plus Jakarta Sans', sans-serif; font-size: .58rem; font-weight: 600; cursor: pointer; border-radius: 10px; margin: 5px 2px; transition: all .18s; -webkit-tap-highlight-color: transparent; }
+.bnav-svg { width: 20px; height: 20px; }
+.bottom-nav button.active { background: var(--brand); color: #fff; box-shadow: 0 2px 10px rgba(0,165,194,.4); }
 
 /* ══ RESPONSIVE ══ */
 @media (max-width: 1024px) { .chart-grid { grid-template-columns: 1fr; } }
@@ -267,8 +272,9 @@ tr.pendente td { border-left: 3px solid var(--red); }
   .sidebar { transform: translateX(-100%); width: 260px; padding-top: 66px; }
   .sidebar.open { transform: translateX(0); }
   .mobile-header { display: flex; }
+  .bottom-nav { display: flex; flex-direction: column; }
   body { display: block; }
-  .main { margin-left: 0; padding: 14px; padding-top: calc(54px + 14px); padding-bottom: 20px; }
+  .main { margin-left: 0; padding: 14px; padding-top: calc(54px + 14px); padding-bottom: calc(var(--nav-h) + 14px); }
   .page-header { margin-bottom: 14px; }
   .page-header h2 { font-size: 1.35rem; }
   .cards { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
@@ -289,11 +295,20 @@ tr.pendente td { border-left: 3px solid var(--red); }
   .modal-footer { flex-direction: column-reverse; }
   .modal-footer .btn { width: 100%; justify-content: center; }
   .rel-summary { grid-template-columns: 1fr 1fr; }
-  .toast { bottom: 20px; right: 10px; left: 10px; max-width: unset; }
+  .toast { bottom: calc(var(--nav-h) + 10px); right: 10px; left: 10px; max-width: unset; }
 }
 
 @media (max-width: 380px) {
   .cards { grid-template-columns: 1fr; }
   .insumos-grid { grid-template-columns: 1fr; }
   .rel-summary { grid-template-columns: 1fr; }
+  .bottom-nav button { font-size: .53rem; }
+  .bnav-svg { width: 18px; height: 18px; }
+}
+
+/* ══ CARDS MOBILE (substitui row-cards dentro de tabela) ══ */
+.cards-mobile { display: none; }
+@media (max-width: 768px) {
+  .cards-mobile { display: block; }
+  .table-scroll { display: none; }
 }

@@ -288,6 +288,8 @@ async function abrirModalPrec(prec = null) {
   document.getElementById('mp-nome').value = '';
   document.getElementById('mp-rendimento').value = '1';
   document.getElementById('mp-obs').value = '';
+  document.getElementById('mp-valor-venda').value = '';
+  document.getElementById('mp-lucro-bruto-box').style.display = 'none';
   document.getElementById('mp-insumos-lista').innerHTML = '';
   document.getElementById('modal-prec-title').textContent = prec ? 'Editar Precificação' : 'Nova Precificação';
 
@@ -297,6 +299,7 @@ async function abrirModalPrec(prec = null) {
   if (prec) {
     document.getElementById('mp-id').value = prec.id;
     document.getElementById('mp-nome').value = prec.produto_nome || '';
+    document.getElementById('mp-valor-venda').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? '' : (p.valor_venda || ''); } catch { return ''; } })();
     document.getElementById('mp-rendimento').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? (prec.rendimento || 1) : (p.rendimento || 1); } catch { return prec.rendimento || 1; } })();
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
@@ -374,6 +377,20 @@ function recalcPrec() {
   document.getElementById('mp-custo-unit').textContent     = fmt(custoUnit);
   document.getElementById('mp-margem-final').textContent   = fmt(maoObra);
   document.getElementById('mp-preco-sugerido').textContent = fmt(sugerido);
+
+  // Lucro bruto: valor de venda - custo dos insumos
+  const valorVenda = parseFloat(document.getElementById('mp-valor-venda')?.value) || 0;
+  const box = document.getElementById('mp-lucro-bruto-box');
+  if (valorVenda > 0) {
+    const lucroBruto = valorVenda - totalInsumos;
+    document.getElementById('mp-venda-display').textContent   = fmt(valorVenda);
+    document.getElementById('mp-insumos-display').textContent = fmt(totalInsumos);
+    document.getElementById('mp-lucro-bruto').textContent     = fmt(lucroBruto);
+    document.getElementById('mp-lucro-bruto').className       = 'num val ' + (lucroBruto >= 0 ? 'green' : 'red');
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
 }
 
 async function savePrec() {
@@ -398,7 +415,8 @@ async function savePrec() {
   const custoUnit    = subtotal1 / rendimento;
   const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
-  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento }) };
+  const valorVenda = parseFloat(document.getElementById('mp-valor-venda').value) || 0;
+  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final: valorVenda || preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento, valor_venda: valorVenda }) };
   try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);

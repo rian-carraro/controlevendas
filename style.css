@@ -312,3 +312,11 @@ tr.pendente td { border-left: 3px solid var(--red); }
   .cards-mobile { display: block; }
   .table-scroll { display: none; }
 }
+
+/* ══ LUCRO BRUTO BOX ══ */
+.prec-lucro-bruto-box { background: var(--bg); border-radius: var(--r-sm); border: 1.5px solid var(--warm2); padding: 14px 16px; margin-bottom: 14px; }
+.prec-lucro-bruto-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--warm2); font-size: .88rem; color: var(--text2); }
+.prec-lucro-bruto-total { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 0; font-weight: 700; font-size: .95rem; }
+.prec-lucro-bruto-total .val { font-family: 'Poppins', sans-serif; font-size: 1.4rem; font-weight: 700; }
+.prec-lucro-bruto-total .val.green { color: var(--green); }
+.prec-lucro-bruto-total .val.red   { color: var(--red); }

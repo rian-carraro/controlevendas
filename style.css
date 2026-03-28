@@ -336,3 +336,50 @@ tr.pendente td { border-left: 3px solid var(--red); }
   .mv-item-sub { grid-column: 1; text-align: left; font-size: .8rem; }
   .mv-total-input { width: 110px; }
 }
+
+/* ══ CARDS MOBILE ══ */
+.cards-mobile { display: none; }
+@media (max-width: 768px) {
+  .cards-mobile { display: block; }
+  .table-scroll { display: none; }
+}
+
+/* ══ MODAL VENDA — múltiplos itens ══ */
+.mv-item-linha { display: grid; grid-template-columns: 1fr 120px auto 28px; gap: 8px; align-items: center; margin-bottom: 8px; }
+.mv-item-linha select { padding: 8px 10px; border: 1.5px solid var(--warm2); border-radius: var(--r-sm); font-family: 'Plus Jakarta Sans', sans-serif; font-size: .85rem; color: var(--text); background: var(--bg); outline: none; width: 100%; }
+.mv-item-linha select:focus { border-color: var(--brand); }
+.mv-item-qty-wrap { display: flex; align-items: center; border: 1.5px solid var(--warm2); border-radius: var(--r-sm); overflow: hidden; background: var(--bg); }
+.mv-item-qty-wrap:focus-within { border-color: var(--brand); }
+.mv-item-qty-wrap .qty-btn { width: 30px; height: 36px; font-size: 1rem; }
+.mv-item-qty-wrap input { width: 40px; border: none; background: transparent; text-align: center; font-family: 'Poppins', sans-serif; font-size: .88rem; font-weight: 600; color: var(--text); padding: 4px 2px; outline: none; -moz-appearance: textfield; }
+.mv-item-qty-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.mv-item-sub { font-family: 'Poppins', sans-serif; font-size: .85rem; color: var(--brand-d); font-weight: 600; text-align: right; white-space: nowrap; }
+.mv-totais-box { background: var(--bg); border-radius: var(--r-sm); border: 1.5px solid var(--warm2); padding: 14px 16px; margin-bottom: 16px; }
+.mv-totais-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--warm2); gap: 10px; }
+.mv-totais-row-venda { border-bottom: none; padding-bottom: 0; }
+.mv-totais-label { font-size: .82rem; font-weight: 600; color: var(--text2); }
+.mv-totais-val { font-family: 'Poppins', sans-serif; font-size: 1rem; font-weight: 700; color: var(--text); }
+.mv-total-input { width: 130px; padding: 8px 12px; border: 1.5px solid var(--brand); border-radius: var(--r-sm); font-family: 'Poppins', sans-serif; font-size: .95rem; font-weight: 600; color: var(--text); background: var(--white); outline: none; text-align: right; -moz-appearance: textfield; }
+.mv-total-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.mv-total-input:focus { border-color: var(--brand-d); }
+.mv-totais-diferenca { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--warm2); font-weight: 700; font-size: .9rem; }
+.mv-dif-val { font-family: 'Poppins', sans-serif; font-size: 1.2rem; font-weight: 700; }
+.mv-dif-val.green { color: var(--green); }
+.mv-dif-val.red   { color: var(--red); }
+
+/* ══ LUCRO BRUTO BOX ══ */
+.prec-lucro-bruto-box { background: var(--bg); border-radius: var(--r-sm); border: 1.5px solid var(--warm2); padding: 14px 16px; margin-bottom: 14px; }
+.prec-lucro-bruto-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--warm2); font-size: .88rem; color: var(--text2); }
+.prec-lucro-bruto-total { display: flex; align-items: center; justify-content: space-between; padding: 10px 0 0; font-weight: 700; font-size: .95rem; }
+.prec-lucro-bruto-total .val { font-family: 'Poppins', sans-serif; font-size: 1.4rem; font-weight: 700; }
+.prec-lucro-bruto-total .val.green { color: var(--green); }
+.prec-lucro-bruto-total .val.red   { color: var(--red); }
+
+@media (max-width: 768px) {
+  .mv-item-linha { grid-template-columns: 1fr 28px; gap: 6px; }
+  .mv-item-linha select { grid-column: 1; }
+  .mv-item-linha .btn-remove-linha { grid-column: 2; grid-row: 1; align-self: start; }
+  .mv-item-qty-wrap { grid-column: 1; }
+  .mv-item-sub { grid-column: 1; text-align: left; font-size: .8rem; }
+  .mv-total-input { width: 110px; }
+}

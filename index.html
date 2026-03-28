@@ -180,6 +180,7 @@
 
 </main>
 
+
 <!-- ══ MODAIS ══ -->
 
 <!-- MODAL INSUMO (criar/editar) -->
@@ -263,6 +264,25 @@
       </div>
     </div>
 
+    <div class="form-group">
+      <label>Valor de venda (R$)</label>
+      <input type="number" id="mp-valor-venda" placeholder="0,00" step="0.01" min="0" oninput="recalcPrec()">
+    </div>
+    <div id="mp-lucro-bruto-box" class="prec-lucro-bruto-box" style="display:none">
+      <div class="prec-lucro-bruto-row">
+        <span>Valor de venda</span>
+        <span class="num" id="mp-venda-display">R$ 0,00</span>
+      </div>
+      <div class="prec-lucro-bruto-row">
+        <span>Custo dos insumos</span>
+        <span class="num" id="mp-insumos-display">R$ 0,00</span>
+      </div>
+      <div class="prec-lucro-bruto-total">
+        <span>Lucro bruto</span>
+        <span class="num val" id="mp-lucro-bruto">R$ 0,00</span>
+      </div>
+    </div>
+
     <div class="form-group"><label>Observações</label><textarea id="mp-obs" placeholder="Notas opcionais..."></textarea></div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-prec')">Cancelar</button>
@@ -276,15 +296,11 @@
   <div class="modal modal-wide">
     <h3 id="modal-venda-title">Registrar Venda</h3>
     <input type="hidden" id="mv-id">
-
-    <!-- Lista de produtos -->
     <div class="form-group">
       <label>Produtos</label>
       <div id="mv-itens-lista"></div>
       <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addItemVenda()">+ Adicionar produto</button>
     </div>
-
-    <!-- Totais -->
     <div class="mv-totais-box">
       <div class="mv-totais-row">
         <span class="mv-totais-label">Total esperado (precificação)</span>
@@ -299,7 +315,6 @@
         <span class="mv-dif-val" id="mv-diferenca">R$ 0,00</span>
       </div>
     </div>
-
     <div class="form-group"><label>Descrição / Cliente</label><input type="text" id="mv-desc" placeholder="Ex: Brigadeiros para festa — João"></div>
     <div class="form-group"><label>Data</label><input type="date" id="mv-data"></div>
     <div class="form-group">

@@ -288,8 +288,6 @@ async function abrirModalPrec(prec = null) {
   document.getElementById('mp-nome').value = '';
   document.getElementById('mp-rendimento').value = '1';
   document.getElementById('mp-obs').value = '';
-  document.getElementById('mp-valor-venda').value = '';
-  document.getElementById('mp-lucro-bruto-box').style.display = 'none';
   document.getElementById('mp-insumos-lista').innerHTML = '';
   document.getElementById('modal-prec-title').textContent = prec ? 'Editar Precificação' : 'Nova Precificação';
 
@@ -299,7 +297,6 @@ async function abrirModalPrec(prec = null) {
   if (prec) {
     document.getElementById('mp-id').value = prec.id;
     document.getElementById('mp-nome').value = prec.produto_nome || '';
-    document.getElementById('mp-valor-venda').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? '' : (p.valor_venda || ''); } catch { return ''; } })();
     document.getElementById('mp-rendimento').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? (prec.rendimento || 1) : (p.rendimento || 1); } catch { return prec.rendimento || 1; } })();
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
@@ -377,20 +374,6 @@ function recalcPrec() {
   document.getElementById('mp-custo-unit').textContent     = fmt(custoUnit);
   document.getElementById('mp-margem-final').textContent   = fmt(maoObra);
   document.getElementById('mp-preco-sugerido').textContent = fmt(sugerido);
-
-  // Lucro bruto: valor de venda - custo dos insumos
-  const valorVenda = parseFloat(document.getElementById('mp-valor-venda')?.value) || 0;
-  const box = document.getElementById('mp-lucro-bruto-box');
-  if (valorVenda > 0) {
-    const lucroBruto = valorVenda - totalInsumos;
-    document.getElementById('mp-venda-display').textContent   = fmt(valorVenda);
-    document.getElementById('mp-insumos-display').textContent = fmt(totalInsumos);
-    document.getElementById('mp-lucro-bruto').textContent     = fmt(lucroBruto);
-    document.getElementById('mp-lucro-bruto').className       = 'num val ' + (lucroBruto >= 0 ? 'green' : 'red');
-    box.style.display = 'block';
-  } else {
-    box.style.display = 'none';
-  }
 }
 
 async function savePrec() {
@@ -415,8 +398,7 @@ async function savePrec() {
   const custoUnit    = subtotal1 / rendimento;
   const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
-  const valorVenda = parseFloat(document.getElementById('mp-valor-venda').value) || 0;
-  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final: valorVenda || preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento, valor_venda: valorVenda }) };
+  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento }) };
   try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);
@@ -454,10 +436,11 @@ async function loadPrecificacoes() {
 }
 
 // ══════════════════════════════════════════
-// VENDAS — com produto + qty + pagamento
+// VENDAS — múltiplos produtos
 // ══════════════════════════════════════════
 let _precCache = [];
 let _pagStatus = 'pago';
+let _itemCont  = 0;
 
 function setPagStatus(status) {
   _pagStatus = status;
@@ -465,69 +448,161 @@ function setPagStatus(status) {
   document.getElementById('pag-pendente').classList.toggle('active', status === 'pendente');
 }
 
+function _optsPrec() {
+  return '<option value="">Selecionar produto...</option>' +
+    _precCache.map(p => `<option value="${p.id}" data-nome="${p.produto_nome}" data-preco="${p.preco_final}">${p.produto_nome} — ${fmt(p.preco_final)}</option>`).join('');
+}
+
+function addItemVenda(item = null) {
+  const id = _itemCont++;
+  const div = document.createElement('div');
+  div.className = 'mv-item-linha';
+  div.id = 'mv-item-' + id;
+  div.innerHTML = `
+    <select class="mv-item-sel" onchange="onItemSelect(${id})">${_optsPrec()}</select>
+    <div class="mv-item-qty-wrap">
+      <button type="button" class="qty-btn" onclick="changeItemQty(${id},-1)">&#8722;</button>
+      <input type="number" class="mv-item-qty" id="mv-iqty-${id}" value="1" min="1" step="1" oninput="recalcVenda()">
+      <button type="button" class="qty-btn" onclick="changeItemQty(${id},1)">&#43;</button>
+    </div>
+    <span class="mv-item-sub" id="mv-isub-${id}">R$ 0,00</span>
+    <button type="button" class="btn-remove-linha" onclick="removeItemVenda('mv-item-${id}')">&#215;</button>
+  `;
+  document.getElementById('mv-itens-lista').appendChild(div);
+  if (item) {
+    const sel = div.querySelector('.mv-item-sel');
+    sel.value = item.prec_id || '';
+    div.querySelector('.mv-item-qty').value = item.qty || 1;
+  }
+  recalcVenda();
+}
+
+function removeItemVenda(id) {
+  const el = document.getElementById(id);
+  if (el) { el.remove(); recalcVenda(); }
+}
+
+function onItemSelect(id) { recalcVenda(); }
+
+function changeItemQty(id, delta) {
+  const el = document.getElementById('mv-iqty-' + id);
+  if (el) { el.value = Math.max(1, (parseInt(el.value) || 1) + delta); recalcVenda(); }
+}
+
+function recalcVenda() {
+  let totalEsperado = 0;
+  document.querySelectorAll('.mv-item-linha').forEach(linha => {
+    const sel = linha.querySelector('.mv-item-sel');
+    const qty = parseInt(linha.querySelector('.mv-item-qty').value) || 1;
+    const opt = sel?.options[sel.selectedIndex];
+    const preco = parseFloat(opt?.getAttribute('data-preco')) || 0;
+    const sub = preco * qty;
+    const subEl = linha.querySelector('.mv-item-sub');
+    if (subEl) subEl.textContent = fmt(sub);
+    totalEsperado += sub;
+  });
+  document.getElementById('mv-total-esperado').textContent = fmt(totalEsperado);
+
+  const totalVenda = parseFloat(document.getElementById('mv-total-venda').value) || 0;
+  const difBox = document.getElementById('mv-diferenca-box');
+  if (totalVenda > 0) {
+    const dif = totalVenda - totalEsperado;
+    const difEl = document.getElementById('mv-diferenca');
+    difEl.textContent = fmt(dif);
+    difEl.className = 'mv-dif-val ' + (dif >= 0 ? 'green' : 'red');
+    difBox.style.display = 'flex';
+  } else {
+    difBox.style.display = 'none';
+  }
+}
+
 async function abrirModalVenda(venda = null) {
   _pagStatus = 'pago';
+  _itemCont  = 0;
   setPagStatus('pago');
   document.getElementById('mv-id').value = '';
-  document.getElementById('mv-produto').value = '';
-  document.getElementById('mv-qty').value = '1';
-  document.getElementById('mv-preco-unit').value = '';
+  document.getElementById('mv-itens-lista').innerHTML = '';
+  document.getElementById('mv-total-venda').value = '';
+  document.getElementById('mv-total-esperado').textContent = 'R$ 0,00';
+  document.getElementById('mv-diferenca-box').style.display = 'none';
   document.getElementById('mv-desc').value = '';
   document.getElementById('mv-obs').value = '';
-  document.getElementById('mv-total-preview').textContent = 'R$ 0,00';
   document.getElementById('modal-venda-title').textContent = venda ? 'Editar Venda' : 'Registrar Venda';
-  try { _precCache = await sbGet('precificacoes', 'select=id,produto_nome,preco_final&order=produto_nome.asc'); } catch { _precCache = []; }
-  document.getElementById('mv-produto').innerHTML = '<option value="">Selecionar produto...</option>' +
-    _precCache.map(p => `<option value="${p.id}" data-nome="${p.produto_nome}" data-preco="${p.preco_final}">${p.produto_nome} — ${fmt(p.preco_final)}</option>`).join('');
+  try { _precCache = await sbGet('precificacoes', 'select=id,produto_nome,preco_final,insumos_json&order=produto_nome.asc'); } catch { _precCache = []; }
+
   if (venda) {
     document.getElementById('mv-id').value = venda.id;
     document.getElementById('mv-desc').value = venda.descricao || '';
-    document.getElementById('mv-qty').value  = venda.quantidade || 1;
-    document.getElementById('mv-preco-unit').value = venda.preco_unitario || '';
     document.getElementById('mv-data').value = venda.data || today();
     document.getElementById('mv-obs').value  = venda.observacoes || '';
+    document.getElementById('mv-total-venda').value = venda.valor || '';
     setPagStatus(venda.status_pagamento || 'pago');
-    recalcVenda();
+    // Carregar itens salvos
+    try {
+      const itens = venda.itens_json ? JSON.parse(venda.itens_json) : null;
+      if (itens && itens.length) {
+        itens.forEach(it => addItemVenda(it));
+      } else {
+        addItemVenda();
+      }
+    } catch { addItemVenda(); }
   } else {
     document.getElementById('mv-data').value = today();
+    addItemVenda();
   }
+  recalcVenda();
   openModal('modal-venda');
 }
 
-function onProdutoSelect() {
-  const sel = document.getElementById('mv-produto');
-  const opt = sel.options[sel.selectedIndex];
-  if (!opt || !opt.value) return;
-  document.getElementById('mv-desc').value = opt.getAttribute('data-nome') || '';
-  document.getElementById('mv-preco-unit').value = parseFloat(opt.getAttribute('data-preco') || 0).toFixed(2);
-  recalcVenda();
-}
-function changeQty(delta) { const el = document.getElementById('mv-qty'); el.value = Math.max(1, (parseInt(el.value) || 1) + delta); recalcVenda(); }
-function recalcVenda() {
-  const qty = parseInt(document.getElementById('mv-qty').value) || 1;
-  const preco = parseFloat(document.getElementById('mv-preco-unit').value) || 0;
-  document.getElementById('mv-total-preview').textContent = fmt(qty * preco);
-}
-
 async function saveVenda() {
-  const id    = document.getElementById('mv-id').value;
-  const qty   = parseInt(document.getElementById('mv-qty').value)  || 1;
-  const unit  = parseFloat(document.getElementById('mv-preco-unit').value) || 0;
-  const valor = qty * unit;
-  const desc  = document.getElementById('mv-desc').value.trim();
-  const data  = document.getElementById('mv-data').value;
-  const obs   = document.getElementById('mv-obs').value;
-  if (!desc)  { showToast('Informe a descrição', 'error'); return; }
-  if (!valor) { showToast('Informe o preço unitário', 'error'); return; }
-  const payload = { descricao: desc, valor, data, observacoes: obs, quantidade: qty, preco_unitario: unit, status_pagamento: _pagStatus };
+  const id   = document.getElementById('mv-id').value;
+  const desc = document.getElementById('mv-desc').value.trim();
+  const data = document.getElementById('mv-data').value;
+  const obs  = document.getElementById('mv-obs').value;
+  const valor = parseFloat(document.getElementById('mv-total-venda').value) || 0;
+
+  // Coletar itens
+  const itens = [];
+  let totalEsperado = 0;
+  document.querySelectorAll('.mv-item-linha').forEach(linha => {
+    const sel = linha.querySelector('.mv-item-sel');
+    const qty = parseInt(linha.querySelector('.mv-item-qty').value) || 1;
+    if (!sel || !sel.value) return;
+    const opt = sel.options[sel.selectedIndex];
+    const preco = parseFloat(opt.getAttribute('data-preco')) || 0;
+    itens.push({ prec_id: sel.value, nome: opt.text.split(' —')[0], qty, preco_unit: preco });
+    totalEsperado += preco * qty;
+  });
+
+  if (!desc)  { showToast('Informe a descrição / cliente', 'error'); return; }
+  if (!valor) { showToast('Informe o total da venda', 'error'); return; }
+  if (!itens.length) { showToast('Adicione ao menos um produto', 'error'); return; }
+
+  const descAuto = itens.map(i => `${i.qty}x ${i.nome}`).join(', ');
+  const descFinal = desc || descAuto;
+  const qty = itens.reduce((a, i) => a + i.qty, 0);
+
+  const payload = {
+    descricao: descFinal,
+    valor,
+    data,
+    observacoes: obs,
+    quantidade: qty,
+    preco_unitario: totalEsperado / Math.max(qty, 1),
+    status_pagamento: _pagStatus,
+    itens_json: JSON.stringify(itens)
+  };
+
   try {
     if (id) {
       await sbPatch('vendas', id, payload);
     } else {
       await sbPost('vendas', payload);
-      await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Venda: ' + desc, valor, data, categoria: 'venda' });
+      await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Venda: ' + descFinal, valor, data, categoria: 'venda' });
     }
-    closeModal('modal-venda'); showToast(id ? 'Venda atualizada!' : 'Venda registrada!', 'success'); loadVendas();
+    closeModal('modal-venda');
+    showToast(id ? 'Venda atualizada!' : 'Venda registrada!', 'success');
+    loadVendas();
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 

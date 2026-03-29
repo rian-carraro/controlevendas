@@ -56,7 +56,7 @@ function showPage(name, btn) {
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('[data-page="' + name + '"]').forEach(b => b.classList.add('active'));
   closeSidebar();
-  const loaders = { dashboard: loadDashboard, insumos: loadInsumos, precificacao: loadPrecificacoes, vendas: loadVendas, compras: loadCompras, financeiro: loadMovimentacoes, relatorio: initRelatorio };
+  const loaders = { dashboard: loadDashboard, insumos: loadInsumos, precificacao: loadPrecificacoes, vendas: loadVendas, compras: loadCompras, financeiro: loadMovimentacoes, relatorio: initRelatorio, encomendas: loadEncomendas };
   if (loaders[name]) loaders[name]();
 }
 
@@ -117,11 +117,11 @@ async function loadDashboard() {
     document.getElementById('c-lucro').textContent = fmt(lucro); document.getElementById('c-lucro').className = 'card-value ' + (lucro >= 0 ? 'green' : 'red');
     const meses = [], dadosV = [], dadosC = [];
     for (let i = 5; i >= 0; i--) { const d = new Date(); d.setMonth(d.getMonth() - i); const key = d.toISOString().slice(0, 7); meses.push(d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })); dadosV.push(vendas.filter(x => x.data && x.data.startsWith(key)).reduce((a, x) => a + Number(x.valor), 0)); dadosC.push(compras.filter(x => x.data && x.data.startsWith(key)).reduce((a, x) => a + Number(x.valor), 0)); }
-    const movs = await sbGet('movimentacoes', 'select=*&order=criado_em.desc&limit=8');
     renderChartMensal(meses, dadosV, dadosC); renderChartPizza(totV, totC);
+    const movs = await sbGet('movimentacoes', 'select=*&order=criado_em.desc&limit=8');
     const el = document.getElementById('dash-ultimas');
     if (!movs.length) { el.innerHTML = '<div class="empty"><p>Nenhuma movimentação ainda</p></div>'; return; }
-    el.innerHTML = '<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>' + movs.map(r => '<tr><td>' + fmtDate(r.data) + '</td><td><strong>' + (r.descricao||'—') + '</strong></td><td><span class="badge ' + (r.categoria||r.tipo) + '">' + (r.categoria||r.tipo) + '</span></td><td><span class="num" style="font-weight:600;color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></td></tr>').join('') + '</tbody></table></div><div class="cards-mobile">' + movs.map(r => '<div class="row-card"><div class="row-card-top"><span class="row-card-title">' + (r.descricao||'—') + '</span><span class="row-card-value" style="color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span class="badge ' + (r.categoria||r.tipo) + '">' + (r.categoria||r.tipo) + '</span></div></div>').join('') + '</div>';
+    el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>${movs.map(r => `<tr><td>${fmtDate(r.data)}</td><td><strong>${r.descricao || '—'}</strong></td><td><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></td><td><span class="num" style="font-weight:600;color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></td></tr><div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao || '—'}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></div></div>`).join('')}</tbody></table></div>`;
   } catch (e) { showToast('Erro no dashboard: ' + e.message, 'error'); }
 }
 
@@ -288,8 +288,6 @@ async function abrirModalPrec(prec = null) {
   document.getElementById('mp-nome').value = '';
   document.getElementById('mp-rendimento').value = '1';
   document.getElementById('mp-obs').value = '';
-  document.getElementById('mp-valor-venda').value = '';
-  if (document.getElementById('mp-lucro-bruto-box')) document.getElementById('mp-lucro-bruto-box').style.display = 'none';
   document.getElementById('mp-insumos-lista').innerHTML = '';
   document.getElementById('modal-prec-title').textContent = prec ? 'Editar Precificação' : 'Nova Precificação';
 
@@ -299,7 +297,6 @@ async function abrirModalPrec(prec = null) {
   if (prec) {
     document.getElementById('mp-id').value = prec.id;
     document.getElementById('mp-nome').value = prec.produto_nome || '';
-    document.getElementById('mp-valor-venda').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? '' : (p.valor_venda || ''); } catch { return ''; } })();
     document.getElementById('mp-rendimento').value = (() => { try { const p = prec.insumos_json ? JSON.parse(prec.insumos_json) : {}; return Array.isArray(p) ? (prec.rendimento || 1) : (p.rendimento || 1); } catch { return prec.rendimento || 1; } })();
     document.getElementById('mp-obs').value = prec.observacoes || '';
     // Carrega linhas de insumos salvas
@@ -377,19 +374,6 @@ function recalcPrec() {
   document.getElementById('mp-custo-unit').textContent     = fmt(custoUnit);
   document.getElementById('mp-margem-final').textContent   = fmt(maoObra);
   document.getElementById('mp-preco-sugerido').textContent = fmt(sugerido);
-  const valorVendaEl = document.getElementById('mp-valor-venda');
-  const box = document.getElementById('mp-lucro-bruto-box');
-  if (valorVendaEl && box) {
-    const valorVenda = parseFloat(valorVendaEl.value) || 0;
-    if (valorVenda > 0) {
-      const lucroBruto = valorVenda - totalInsumos;
-      document.getElementById('mp-venda-display').textContent   = fmt(valorVenda);
-      document.getElementById('mp-insumos-display').textContent = fmt(totalInsumos);
-      document.getElementById('mp-lucro-bruto').textContent     = fmt(lucroBruto);
-      document.getElementById('mp-lucro-bruto').className       = 'num val ' + (lucroBruto >= 0 ? 'green' : 'red');
-      box.style.display = 'block';
-    } else { box.style.display = 'none'; }
-  }
 }
 
 async function savePrec() {
@@ -414,8 +398,7 @@ async function savePrec() {
   const custoUnit    = subtotal1 / rendimento;
   const preco_final  = custoUnit * 1.20;   // + 20% mão de obra por unidade
 
-  const valorVenda = parseFloat(document.getElementById('mp-valor-venda').value) || 0;
-  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final: valorVenda || preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento, valor_venda: valorVenda }) };
+  const payload = { produto_nome: nome, custo_ingredientes: totalInsumos, mao_de_obra: 0, preco_final, observacoes: obs, insumos_json: JSON.stringify({ linhas, rendimento }) };
   try {
     if (id) await sbPatch('precificacoes', id, payload);
     else    await sbPost('precificacoes', payload);
@@ -634,15 +617,38 @@ async function loadVendas() {
     const total = data.reduce((a, x) => a + Number(x.valor), 0);
     document.getElementById('total-vendas-label').textContent = `Total: ${fmt(total)} (${data.length} venda${data.length !== 1 ? 's' : ''})`;
     if (!data.length) { document.getElementById('lista-vendas').innerHTML = '<div class="empty"><p>Nenhuma venda no período</p></div>'; return; }
-    const tRowsV = data.map(r => {
+    const rows = data.map(r => {
       const pend = r.status_pagamento === 'pendente';
-      return '<tr class="' + (pend?'pendente':'') + '"><td>' + fmtDate(r.data) + '</td><td><strong>' + r.descricao + '</strong></td><td><span class="num">' + (r.quantidade||1) + '</span></td><td><span class="num">' + fmt(r.preco_unitario||r.valor) + '</span></td><td><span class="num" style="font-weight:700;color:var(--green)">' + fmt(r.valor) + '</span></td><td><span class="badge ' + (r.status_pagamento||'pago') + '">' + (r.status_pagamento==='pendente'?'Pendente':'Pago') + '</span></td><td style="color:var(--text3);font-size:.82rem">' + (r.observacoes||'—') + '</td><td class="td-actions"><button class="btn btn-edit btn-sm" onclick=\'abrirModalVenda(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'vendas\',\'' + r.id + '\',loadVendas)">Excluir</button></td></tr>';
+      return `<tr class="${pend ? 'pendente' : ''}">
+        <td>${fmtDate(r.data)}</td>
+        <td><strong>${r.descricao}</strong></td>
+        <td><span class="num">${r.quantidade || 1}</span></td>
+        <td><span class="num">${fmt(r.preco_unitario || r.valor)}</span></td>
+        <td><span class="num" style="font-weight:700;color:var(--green)">${fmt(r.valor)}</span></td>
+        <td><span class="badge ${r.status_pagamento || 'pago'}">${r.status_pagamento === 'pendente' ? 'Pendente' : 'Pago'}</span></td>
+        <td style="color:var(--text3);font-size:.82rem">${r.observacoes || '—'}</td>
+        <td class="td-actions">
+          <button class="btn btn-edit btn-sm" onclick='abrirModalVenda(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('vendas','${r.id}',loadVendas)">Excluir</button>
+        </td>
+      </tr>
+      <div class="row-card ${pend ? 'pendente' : ''}">
+        <div class="row-card-top">
+          <span class="row-card-title">${r.descricao}</span>
+          <span class="row-card-value" style="color:var(--green)">${fmt(r.valor)}</span>
+        </div>
+        <div class="row-card-meta">
+          <span class="row-card-date">${fmtDate(r.data)}</span>
+          <span style="font-size:.74rem;color:var(--text3)">${r.quantidade || 1}x — ${fmt(r.preco_unitario || r.valor)}</span>
+          <span class="badge ${r.status_pagamento || 'pago'}">${r.status_pagamento === 'pendente' ? 'Pendente' : 'Pago'}</span>
+          <button class="btn btn-edit btn-sm" onclick='abrirModalVenda(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('vendas','${r.id}',loadVendas)">Excluir</button>
+        </div>
+      </div>`;
     }).join('');
-    const cCardsV = data.map(r => {
-      const pend = r.status_pagamento === 'pendente';
-      return '<div class="row-card ' + (pend?'pendente':'') + '"><div class="row-card-top"><span class="row-card-title">' + r.descricao + '</span><span class="row-card-value" style="color:var(--green)">' + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span style="font-size:.74rem;color:var(--text3)">' + (r.quantidade||1) + 'x — ' + fmt(r.preco_unitario||r.valor) + '</span><span class="badge ' + (r.status_pagamento||'pago') + '">' + (r.status_pagamento==='pendente'?'Pendente':'Pago') + '</span><button class="btn btn-edit btn-sm" onclick=\'abrirModalVenda(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'vendas\',\'' + r.id + '\',loadVendas)">Excluir</button></div></div>';
-    }).join('');
-    document.getElementById('lista-vendas').innerHTML = '<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Unit.</th><th>Total</th><th>Pagamento</th><th>Obs.</th><th></th></tr></thead><tbody>' + tRowsV + '</tbody></table></div><div class="cards-mobile">' + cCardsV + '</div>';
+    document.getElementById('lista-vendas').innerHTML = `<div class="table-scroll"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Unit.</th><th>Total</th><th>Pagamento</th><th>Obs.</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -691,9 +697,28 @@ async function loadCompras() {
     const total = data.reduce((a, x) => a + Number(x.valor), 0);
     document.getElementById('total-compras-label').textContent = `Total: ${fmt(total)} (${data.length} compra${data.length !== 1 ? 's' : ''})`;
     if (!data.length) { document.getElementById('lista-compras').innerHTML = '<div class="empty"><p>Nenhuma compra no período</p></div>'; return; }
-    const tRowsC = data.map(r => '<tr><td>' + fmtDate(r.data) + '</td><td><strong>' + r.descricao + '</strong></td><td><span class="num" style="font-weight:700;color:var(--red)">' + fmt(r.valor) + '</span></td><td style="color:var(--text3);font-size:.82rem">' + (r.observacoes||'—') + '</td><td class="td-actions"><button class="btn btn-edit btn-sm" onclick=\'abrirModalCompra(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'compras\',\'' + r.id + '\',loadCompras)">Excluir</button></td></tr>').join('');
-    const cCardsC = data.map(r => '<div class="row-card"><div class="row-card-top"><span class="row-card-title">' + r.descricao + '</span><span class="row-card-value" style="color:var(--red)">' + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span class="row-card-obs">' + (r.observacoes||'') + '</span><button class="btn btn-edit btn-sm" onclick=\'abrirModalCompra(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'compras\',\'' + r.id + '\',loadCompras)">Excluir</button></div></div>').join('');
-    document.getElementById('lista-compras').innerHTML = '<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th><th></th></tr></thead><tbody>' + tRowsC + '</tbody></table></div><div class="cards-mobile">' + cCardsC + '</div>';
+    const rows = data.map(r => `
+      <tr>
+        <td>${fmtDate(r.data)}</td><td><strong>${r.descricao}</strong></td>
+        <td><span class="num" style="font-weight:700;color:var(--red)">${fmt(r.valor)}</span></td>
+        <td style="color:var(--text3);font-size:.82rem">${r.observacoes || '—'}</td>
+        <td class="td-actions">
+          <button class="btn btn-edit btn-sm" onclick='abrirModalCompra(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('compras','${r.id}',loadCompras)">Excluir</button>
+        </td>
+      </tr>
+      <div class="row-card">
+        <div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--red)">${fmt(r.valor)}</span></div>
+        <div class="row-card-meta">
+          <span class="row-card-date">${fmtDate(r.data)}</span>
+          <span class="row-card-obs">${r.observacoes || ''}</span>
+          <button class="btn btn-edit btn-sm" onclick='abrirModalCompra(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('compras','${r.id}',loadCompras)">Excluir</button>
+        </div>
+      </div>`).join('');
+    document.getElementById('lista-compras').innerHTML = `<div class="table-scroll"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -749,9 +774,29 @@ async function loadMovimentacoes() {
     document.getElementById('fin-saldo').className   = 'card-value ' + (saldo >= 0 ? 'green' : 'red');
     const data = await sbGet('movimentacoes', params);
     if (!data.length) { document.getElementById('lista-movimentacoes').innerHTML = '<div class="empty"><p>Nenhuma movimentação no período</p></div>'; return; }
-    const tRowsM = data.map(r => '<tr><td>' + fmtDate(r.data) + '</td><td><strong>' + r.descricao + '</strong></td><td><span class="badge ' + r.categoria + '">' + r.categoria + '</span></td><td><span class="badge ' + r.tipo + '">' + r.tipo + '</span></td><td><span class="num" style="font-weight:700;color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></td><td class="td-actions"><button class="btn btn-edit btn-sm" onclick=\'abrirModalMov(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'movimentacoes\',\'' + r.id + '\',loadMovimentacoes)">Excluir</button></td></tr>').join('');
-    const cCardsM = data.map(r => '<div class="row-card"><div class="row-card-top"><span class="row-card-title">' + r.descricao + '</span><span class="row-card-value" style="color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span class="badge ' + r.tipo + '">' + r.tipo + '</span><span class="badge ' + r.categoria + '">' + r.categoria + '</span><button class="btn btn-edit btn-sm" onclick=\'abrirModalMov(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>Editar</button><button class="btn btn-danger btn-sm" onclick="del(\'movimentacoes\',\'' + r.id + '\',loadMovimentacoes)">Excluir</button></div></div>').join('');
-    document.getElementById('lista-movimentacoes').innerHTML = '<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th></th></tr></thead><tbody>' + tRowsM + '</tbody></table></div><div class="cards-mobile">' + cCardsM + '</div>';
+    const rows = data.map(r => `
+      <tr>
+        <td>${fmtDate(r.data)}</td><td><strong>${r.descricao}</strong></td>
+        <td><span class="badge ${r.categoria}">${r.categoria}</span></td>
+        <td><span class="badge ${r.tipo}">${r.tipo}</span></td>
+        <td><span class="num" style="font-weight:700;color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></td>
+        <td class="td-actions">
+          <button class="btn btn-edit btn-sm" onclick='abrirModalMov(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('movimentacoes','${r.id}',loadMovimentacoes)">Excluir</button>
+        </td>
+      </tr>
+      <div class="row-card">
+        <div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div>
+        <div class="row-card-meta">
+          <span class="row-card-date">${fmtDate(r.data)}</span>
+          <span class="badge ${r.tipo}">${r.tipo}</span><span class="badge ${r.categoria}">${r.categoria}</span>
+          <button class="btn btn-edit btn-sm" onclick='abrirModalMov(${JSON.stringify(r).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="del('movimentacoes','${r.id}',loadMovimentacoes)">Excluir</button>
+        </div>
+      </div>`).join('');
+    document.getElementById('lista-movimentacoes').innerHTML = `<div class="table-scroll"><table>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Valor</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
@@ -772,8 +817,8 @@ async function gerarRelatorio() {
     document.getElementById('rel-l').className = 'card-value ' + (lucro >= 0 ? 'green' : 'red');
     document.getElementById('rel-vn').textContent = vendas.length + ' vendas'; document.getElementById('rel-cn').textContent = compras.length + ' compras';
     let html = '';
-    if (vendas.length) html += '<div class="table-wrap" style="margin-bottom:16px"><div class="table-header"><h3>Vendas no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>' + vendas.map(r => '<tr class="' + (r.status_pagamento==='pendente'?'pendente':'') + '"><td>' + fmtDate(r.data) + '</td><td>' + r.descricao + '</td><td><span class="num">' + (r.quantidade||1) + '</span></td><td><span class="num" style="color:var(--green);font-weight:600">' + fmt(r.valor) + '</span></td><td><span class="badge ' + (r.status_pagamento||'pago') + '">' + (r.status_pagamento==='pendente'?'Pendente':'Pago') + '</span></td></tr>').join('') + '</tbody></table></div><div class="cards-mobile">' + vendas.map(r => '<div class="row-card ' + (r.status_pagamento==='pendente'?'pendente':'') + '"><div class="row-card-top"><span class="row-card-title">' + r.descricao + '</span><span class="row-card-value" style="color:var(--green)">' + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span class="badge ' + (r.status_pagamento||'pago') + '">' + (r.status_pagamento==='pendente'?'Pendente':'Pago') + '</span></div></div>').join('') + '</div></div>';
-    if (compras.length) html += '<div class="table-wrap"><div class="table-header"><h3>Compras no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>' + compras.map(r => '<tr><td>' + fmtDate(r.data) + '</td><td>' + r.descricao + '</td><td><span class="num" style="color:var(--red);font-weight:600">' + fmt(r.valor) + '</span></td><td style="color:var(--text3)">' + (r.observacoes||'—') + '</td></tr>').join('') + '</tbody></table></div><div class="cards-mobile">' + compras.map(r => '<div class="row-card"><div class="row-card-top"><span class="row-card-title">' + r.descricao + '</span><span class="row-card-value" style="color:var(--red)">' + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span></div></div>').join('') + '</div></div>';
+    if (vendas.length) html += `<div class="table-wrap" style="margin-bottom:16px"><div class="table-header"><h3>Vendas no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Qtd.</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>${vendas.map(r => `<tr class="${r.status_pagamento==='pendente'?'pendente':''}"><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num">${r.quantidade||1}</span></td><td><span class="num" style="color:var(--green);font-weight:600">${fmt(r.valor)}</span></td><td><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></td></tr><div class="row-card ${r.status_pagamento==='pendente'?'pendente':''}"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--green)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.status_pagamento||'pago'}">${r.status_pagamento==='pendente'?'Pendente':'Pago'}</span></div></div>`).join('')}</tbody></table></div></div>`;
+    if (compras.length) html += `<div class="table-wrap"><div class="table-header"><h3>Compras no período</h3></div><div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Obs.</th></tr></thead><tbody>${compras.map(r => `<tr><td>${fmtDate(r.data)}</td><td>${r.descricao}</td><td><span class="num" style="color:var(--red);font-weight:600">${fmt(r.valor)}</span></td><td style="color:var(--text3)">${r.observacoes||'—'}</td></tr><div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao}</span><span class="row-card-value" style="color:var(--red)">${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span></div></div>`).join('')}</tbody></table></div></div>`;
     if (!html) html = '<div class="empty"><p>Nenhum dado neste período</p></div>';
     document.getElementById('rel-detalhe').innerHTML = html; showToast('Relatório gerado!', 'success');
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -784,4 +829,165 @@ async function del(table, id, reload) {
   if (!confirm('Excluir este registro?')) return;
   try { await sbDelete(table, id); showToast('Excluído!', 'success'); reload(); }
   catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════════
+// ENCOMENDAS
+// ══════════════════════════════════════════
+let _encPgto = 'pendente';
+
+function setEncPgto(status) {
+  _encPgto = status;
+  document.getElementById('enc-pag-pago').classList.toggle('active', status === 'pago');
+  document.getElementById('enc-pag-pendente').classList.toggle('active', status === 'pendente');
+}
+
+function abrirModalEncomenda(enc = null) {
+  _encPgto = 'pendente';
+  document.getElementById('enc-id').value = '';
+  document.getElementById('enc-produto').value = '';
+  document.getElementById('enc-qtd').value = '1';
+  document.getElementById('enc-valor').value = '';
+  document.getElementById('enc-cliente').value = '';
+  document.getElementById('enc-obs').value = '';
+  document.getElementById('enc-data-pedido').value = today();
+  document.getElementById('enc-data-entrega').value = '';
+  setEncPgto('pendente');
+  document.getElementById('modal-enc-title').textContent = enc ? 'Editar Encomenda' : 'Nova Encomenda';
+  if (enc) {
+    document.getElementById('enc-id').value           = enc.id;
+    document.getElementById('enc-produto').value      = enc.produto || '';
+    document.getElementById('enc-qtd').value          = enc.quantidade || 1;
+    document.getElementById('enc-valor').value        = enc.valor || '';
+    document.getElementById('enc-cliente').value      = enc.cliente || '';
+    document.getElementById('enc-obs').value          = enc.observacoes || '';
+    document.getElementById('enc-data-pedido').value  = enc.data_pedido || today();
+    document.getElementById('enc-data-entrega').value = enc.data_entrega || '';
+    setEncPgto(enc.pagamento || 'pendente');
+  }
+  openModal('modal-enc');
+}
+
+async function saveEncomenda() {
+  const id           = document.getElementById('enc-id').value;
+  const produto      = document.getElementById('enc-produto').value.trim();
+  const quantidade   = parseInt(document.getElementById('enc-qtd').value) || 1;
+  const valor        = parseFloat(document.getElementById('enc-valor').value) || 0;
+  const cliente      = document.getElementById('enc-cliente').value.trim();
+  const obs          = document.getElementById('enc-obs').value;
+  const data_pedido  = document.getElementById('enc-data-pedido').value;
+  const data_entrega = document.getElementById('enc-data-entrega').value;
+
+  if (!produto)      { showToast('Informe o produto', 'error'); return; }
+  if (!valor)        { showToast('Informe o valor', 'error'); return; }
+  if (!data_entrega) { showToast('Informe a data de entrega', 'error'); return; }
+
+  const payload = { produto, quantidade, valor, cliente, observacoes: obs, data_pedido, data_entrega, pagamento: _encPgto, entrega: 'pendente' };
+
+  // Se edição, mantém status de entrega atual
+  if (id) {
+    delete payload.entrega; // não sobrescreve entrega ao editar
+  }
+
+  try {
+    let savedId = id;
+    if (id) {
+      await sbPatch('encomendas', id, payload);
+    } else {
+      const res = await sbPost('encomendas', payload);
+      savedId = res[0]?.id;
+    }
+
+    // Se pagamento = pago, lança em vendas automaticamente
+    if (_encPgto === 'pago' && !id) {
+      await sbPost('vendas', {
+        descricao: produto + (cliente ? ' — ' + cliente : ''),
+        valor, data: data_pedido, observacoes: obs,
+        quantidade, preco_unitario: valor / quantidade,
+        status_pagamento: 'pago', itens_json: JSON.stringify([{ nome: produto, qty: quantidade, preco_unit: valor / quantidade }])
+      });
+      await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Encomenda: ' + produto, valor, data: data_pedido, categoria: 'venda' });
+    }
+
+    closeModal('modal-enc');
+    showToast(id ? 'Encomenda atualizada!' : 'Encomenda salva!', 'success');
+    loadEncomendas();
+  } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+async function marcarPago(enc) {
+  if (!confirm('Marcar como pago e lançar em Vendas?')) return;
+  try {
+    await sbPatch('encomendas', enc.id, { pagamento: 'pago' });
+    await sbPost('vendas', {
+      descricao: enc.produto + (enc.cliente ? ' — ' + enc.cliente : ''),
+      valor: enc.valor, data: enc.data_pedido || today(), observacoes: enc.observacoes || '',
+      quantidade: enc.quantidade || 1, preco_unitario: enc.valor / (enc.quantidade || 1),
+      status_pagamento: 'pago', itens_json: JSON.stringify([{ nome: enc.produto, qty: enc.quantidade || 1, preco_unit: enc.valor / (enc.quantidade || 1) }])
+    });
+    await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Encomenda: ' + enc.produto, valor: enc.valor, data: enc.data_pedido || today(), categoria: 'venda' });
+    showToast('Pago e lançado em Vendas!', 'success');
+    loadEncomendas();
+  } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+async function marcarEntrega(enc, status) {
+  try {
+    await sbPatch('encomendas', enc.id, { entrega: status });
+    showToast(status === 'entregue' ? 'Marcado como entregue!' : 'Marcado como pendente!', 'success');
+    loadEncomendas();
+  } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
+async function loadEncomendas() {
+  document.getElementById('lista-encomendas').innerHTML = loadingHtml();
+  const filtroStatus = document.getElementById('filtro-enc-status').value;
+  const filtroPgto   = document.getElementById('filtro-enc-pgto').value;
+  let params = 'select=*&order=data_entrega.asc';
+  if (filtroStatus) params += '&entrega=eq.' + filtroStatus;
+  if (filtroPgto)   params += '&pagamento=eq.' + filtroPgto;
+  try {
+    const data = await sbGet('encomendas', params);
+    if (!data.length) {
+      document.getElementById('lista-encomendas').innerHTML = '<div class="empty"><p>Nenhuma encomenda. Clique em "+ Nova Encomenda".</p></div>';
+      return;
+    }
+    const hoje = today();
+    const cards = data.map(enc => {
+      const atrasado = enc.data_entrega && enc.data_entrega < hoje && enc.entrega !== 'entregue';
+      const prazoLabel = enc.entrega === 'entregue'
+        ? '<span class="enc-badge enc-entregue">Entregue</span>'
+        : atrasado
+          ? '<span class="enc-badge enc-atrasado">⚠ Atrasado</span>'
+          : '<span class="enc-badge enc-prazo">No prazo</span>';
+      const pgtoLabel = enc.pagamento === 'pago'
+        ? '<span class="enc-badge enc-pago">Pago</span>'
+        : '<span class="enc-badge enc-pgto-pend">Pgto pendente</span>';
+      const entregaBtn = enc.entrega === 'entregue'
+        ? '<button class="btn btn-secondary btn-sm" onclick=\'marcarEntrega(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'pendente\')\'>Desfazer entrega</button>'
+        : '<button class="btn btn-primary btn-sm" onclick=\'marcarEntrega(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'entregue\')\'>Marcar entregue</button>';
+      const pagoBtn = enc.pagamento !== 'pago'
+        ? '<button class="btn btn-sm enc-btn-pagar" onclick=\'marcarPago(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ')\'>Marcar pago</button>'
+        : '';
+      return '<div class="enc-card' + (atrasado ? ' enc-card-atrasado' : '') + (enc.entrega === 'entregue' ? ' enc-card-entregue' : '') + '">' +
+        '<div class="enc-card-header">' +
+          '<div class="enc-card-title">' + enc.produto + (enc.cliente ? '<span class="enc-cliente"> — ' + enc.cliente + '</span>' : '') + '</div>' +
+          '<div class="enc-card-valor">' + fmt(enc.valor) + '</div>' +
+        '</div>' +
+        '<div class="enc-card-info">' +
+          '<span>📦 ' + (enc.quantidade || 1) + ' un</span>' +
+          '<span>📅 Entrega: <strong>' + fmtDate(enc.data_entrega) + '</strong></span>' +
+          (enc.data_pedido ? '<span>Pedido: ' + fmtDate(enc.data_pedido) + '</span>' : '') +
+        '</div>' +
+        '<div class="enc-card-badges">' + prazoLabel + pgtoLabel + '</div>' +
+        (enc.observacoes ? '<div class="enc-card-obs">' + enc.observacoes + '</div>' : '') +
+        '<div class="enc-card-actions">' +
+          entregaBtn + pagoBtn +
+          '<button class="btn btn-edit btn-sm" onclick=\'abrirModalEncomenda(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ')\'>Editar</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="del(\'encomendas\',\'' + enc.id + '\',loadEncomendas)">Excluir</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    document.getElementById('lista-encomendas').innerHTML = cards;
+  } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }

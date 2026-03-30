@@ -121,7 +121,7 @@ async function loadDashboard() {
     const movs = await sbGet('movimentacoes', 'select=*&order=criado_em.desc&limit=8');
     const el = document.getElementById('dash-ultimas');
     if (!movs.length) { el.innerHTML = '<div class="empty"><p>Nenhuma movimentação ainda</p></div>'; return; }
-    el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>${movs.map(r => `<tr><td>${fmtDate(r.data)}</td><td><strong>${r.descricao || '—'}</strong></td><td><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></td><td><span class="num" style="font-weight:600;color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></td></tr><div class="row-card"><div class="row-card-top"><span class="row-card-title">${r.descricao || '—'}</span><span class="row-card-value" style="color:${r.tipo === 'entrada' ? 'var(--green)' : 'var(--red)'}">${r.tipo === 'entrada' ? '+' : '-'}${fmt(r.valor)}</span></div><div class="row-card-meta"><span class="row-card-date">${fmtDate(r.data)}</span><span class="badge ${r.categoria || r.tipo}">${r.categoria || r.tipo}</span></div></div>`).join('')}</tbody></table></div>`;
+    el.innerHTML = '<div class="table-scroll"><table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th></tr></thead><tbody>' + movs.map(r => '<tr><td>' + fmtDate(r.data) + '</td><td><strong>' + (r.descricao||'—') + '</strong></td><td><span class="badge ' + (r.categoria||r.tipo) + '">' + (r.categoria||r.tipo) + '</span></td><td><span class="num" style="font-weight:600;color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></td></tr>').join('') + '</tbody></table></div><div class="cards-mobile">' + movs.map(r => '<div class="row-card"><div class="row-card-top"><span class="row-card-title">' + (r.descricao||'—') + '</span><span class="row-card-value" style="color:' + (r.tipo==='entrada'?'var(--green)':'var(--red)') + '">' + (r.tipo==='entrada'?'+':'-') + fmt(r.valor) + '</span></div><div class="row-card-meta"><span class="row-card-date">' + fmtDate(r.data) + '</span><span class="badge ' + (r.categoria||r.tipo) + '">' + (r.categoria||r.tipo) + '</span></div></div>').join('') + '</div>';
   } catch (e) { showToast('Erro no dashboard: ' + e.message, 'error'); }
 }
 
@@ -877,61 +877,39 @@ async function saveEncomenda() {
   const obs          = document.getElementById('enc-obs').value;
   const data_pedido  = document.getElementById('enc-data-pedido').value;
   const data_entrega = document.getElementById('enc-data-entrega').value;
-
   if (!produto)      { showToast('Informe o produto', 'error'); return; }
   if (!valor)        { showToast('Informe o valor', 'error'); return; }
   if (!data_entrega) { showToast('Informe a data de entrega', 'error'); return; }
-
   const payload = { produto, quantidade, valor, cliente, observacoes: obs, data_pedido, data_entrega, pagamento: _encPgto, entrega: 'pendente' };
-
-  // Se edição, mantém status de entrega atual
-  if (id) {
-    delete payload.entrega; // não sobrescreve entrega ao editar
-  }
-
   try {
-    let savedId = id;
     if (id) {
+      delete payload.entrega;
       await sbPatch('encomendas', id, payload);
     } else {
-      const res = await sbPost('encomendas', payload);
-      savedId = res[0]?.id;
+      await sbPost('encomendas', payload);
+      if (_encPgto === 'pago') {
+        await sbPost('vendas', { descricao: produto + (cliente ? ' — ' + cliente : ''), valor, data: data_pedido || today(), observacoes: obs, quantidade, preco_unitario: valor / quantidade, status_pagamento: 'pago' });
+        await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Encomenda: ' + produto, valor, data: data_pedido || today(), categoria: 'venda' });
+      }
     }
-
-    // Se pagamento = pago, lança em vendas automaticamente
-    if (_encPgto === 'pago' && !id) {
-      await sbPost('vendas', {
-        descricao: produto + (cliente ? ' — ' + cliente : ''),
-        valor, data: data_pedido, observacoes: obs,
-        quantidade, preco_unitario: valor / quantidade,
-        status_pagamento: 'pago', itens_json: JSON.stringify([{ nome: produto, qty: quantidade, preco_unit: valor / quantidade }])
-      });
-      await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Encomenda: ' + produto, valor, data: data_pedido, categoria: 'venda' });
-    }
-
     closeModal('modal-enc');
     showToast(id ? 'Encomenda atualizada!' : 'Encomenda salva!', 'success');
     loadEncomendas();
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
-async function marcarPago(enc) {
+async function marcarPagoEnc(enc) {
   if (!confirm('Marcar como pago e lançar em Vendas?')) return;
   try {
     await sbPatch('encomendas', enc.id, { pagamento: 'pago' });
-    await sbPost('vendas', {
-      descricao: enc.produto + (enc.cliente ? ' — ' + enc.cliente : ''),
-      valor: enc.valor, data: enc.data_pedido || today(), observacoes: enc.observacoes || '',
-      quantidade: enc.quantidade || 1, preco_unitario: enc.valor / (enc.quantidade || 1),
-      status_pagamento: 'pago', itens_json: JSON.stringify([{ nome: enc.produto, qty: enc.quantidade || 1, preco_unit: enc.valor / (enc.quantidade || 1) }])
-    });
+    await sbPost('vendas', { descricao: enc.produto + (enc.cliente ? ' — ' + enc.cliente : ''), valor: enc.valor, data: enc.data_pedido || today(), observacoes: enc.observacoes || '', quantidade: enc.quantidade || 1, preco_unitario: enc.valor / (enc.quantidade || 1), status_pagamento: 'pago' });
     await sbPost('movimentacoes', { tipo: 'entrada', descricao: 'Encomenda: ' + enc.produto, valor: enc.valor, data: enc.data_pedido || today(), categoria: 'venda' });
     showToast('Pago e lançado em Vendas!', 'success');
     loadEncomendas();
   } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
-async function marcarEntrega(enc, status) {
+async function marcarEntregaEnc(enc, status) {
   try {
     await sbPatch('encomendas', enc.id, { entrega: status });
     showToast(status === 'entregue' ? 'Marcado como entregue!' : 'Marcado como pendente!', 'success');
@@ -956,18 +934,18 @@ async function loadEncomendas() {
     const cards = data.map(enc => {
       const atrasado = enc.data_entrega && enc.data_entrega < hoje && enc.entrega !== 'entregue';
       const prazoLabel = enc.entrega === 'entregue'
-        ? '<span class="enc-badge enc-entregue">Entregue</span>'
+        ? '<span class="enc-badge enc-entregue">✓ Entregue</span>'
         : atrasado
           ? '<span class="enc-badge enc-atrasado">⚠ Atrasado</span>'
-          : '<span class="enc-badge enc-prazo">No prazo</span>';
+          : '<span class="enc-badge enc-prazo">✓ No prazo</span>';
       const pgtoLabel = enc.pagamento === 'pago'
         ? '<span class="enc-badge enc-pago">Pago</span>'
         : '<span class="enc-badge enc-pgto-pend">Pgto pendente</span>';
       const entregaBtn = enc.entrega === 'entregue'
-        ? '<button class="btn btn-secondary btn-sm" onclick=\'marcarEntrega(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'pendente\')\'>Desfazer entrega</button>'
-        : '<button class="btn btn-primary btn-sm" onclick=\'marcarEntrega(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'entregue\')\'>Marcar entregue</button>';
+        ? '<button class="btn btn-secondary btn-sm" onclick=\'marcarEntregaEnc(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'pendente\')\'>Desfazer entrega</button>'
+        : '<button class="btn btn-primary btn-sm" onclick=\'marcarEntregaEnc(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ',\'entregue\')\'>Marcar entregue</button>';
       const pagoBtn = enc.pagamento !== 'pago'
-        ? '<button class="btn btn-sm enc-btn-pagar" onclick=\'marcarPago(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ')\'>Marcar pago</button>'
+        ? '<button class="btn btn-sm enc-btn-pagar" onclick=\'marcarPagoEnc(' + JSON.stringify(enc).replace(/'/g,"&#39;") + ')\'>Marcar pago</button>'
         : '';
       return '<div class="enc-card' + (atrasado ? ' enc-card-atrasado' : '') + (enc.entrega === 'entregue' ? ' enc-card-entregue' : '') + '">' +
         '<div class="enc-card-header">' +
@@ -975,9 +953,9 @@ async function loadEncomendas() {
           '<div class="enc-card-valor">' + fmt(enc.valor) + '</div>' +
         '</div>' +
         '<div class="enc-card-info">' +
-          '<span>📦 ' + (enc.quantidade || 1) + ' un</span>' +
+          '<span>📦 ' + (enc.quantidade||1) + ' un</span>' +
           '<span>📅 Entrega: <strong>' + fmtDate(enc.data_entrega) + '</strong></span>' +
-          (enc.data_pedido ? '<span>Pedido: ' + fmtDate(enc.data_pedido) + '</span>' : '') +
+          (enc.data_pedido ? '<span>Pedido em: ' + fmtDate(enc.data_pedido) + '</span>' : '') +
         '</div>' +
         '<div class="enc-card-badges">' + prazoLabel + pgtoLabel + '</div>' +
         (enc.observacoes ? '<div class="enc-card-obs">' + enc.observacoes + '</div>' : '') +
